@@ -74,7 +74,9 @@ def get_file_content(file_name):
         return file.read()
 
 
-def handle_request(path):
+def handle_request(req_handler):
+    _, path, _ = req_handler.get_status_line()
+    headers = req_handler.get_headers()
     resp_handler = ResponseHandler()
     if path == "/":
         body = get_file_content("index.html")
@@ -89,6 +91,10 @@ def handle_request(path):
             "Content-Type": "text/css",
             "Content-Length": f"{len(body.encode('utf-8'))}",
         }
+        return resp_handler.create_success_response(headers, body)
+    elif path == "/user-agent":
+        body = headers["User-Agent"]
+        headers = {"Content-Type": "text/plain", "Content-Length": f"{len(body)}"}
         return resp_handler.create_success_response(headers, body)
     elif path.startswith("/echo"):
         body = path.split("/echo/")[1]
@@ -107,8 +113,8 @@ def main():
             print(f"CLIENT ADDRESS => Connection from: {conn_address}")
             request = conn.recv(2048)
             req_handler = RequestHandler(request)
-            _, path, _ = req_handler.get_status_line()
-            conn.send(handle_request(path).encode())
+            response = handle_request(req_handler).encode()
+            conn.send(response)
 
 
 if __name__ == "__main__":
