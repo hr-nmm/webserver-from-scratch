@@ -1,4 +1,6 @@
 import socket
+import threading
+import concurrent.futures
 
 CRLF = "\r\n"
 
@@ -33,14 +35,10 @@ class ResponseHandler:
         return resp
 
     def create_success_response(self, headers={}, body=None):
-        return self.create_response(
-            self.http_ver, self.success_code, self.success_text, headers, body
-        )
+        return self.create_response(self.http_ver, self.success_code, self.success_text, headers, body)
 
     def create_failure_response(self, headers={}, body=None):
-        return self.create_response(
-            self.http_ver, self.failure_code, self.failure_text, headers, body
-        )
+        return self.create_response(self.http_ver, self.failure_code, self.failure_text, headers, body)
 
     def end_response(self, response):
         return response + CRLF
@@ -104,17 +102,25 @@ def handle_request(req_handler):
         return resp_handler.create_failure_response()
 
 
+def handle_connection(conn, conn_address):
+    with conn:
+        print(f"CLIENT ADDRESS => Connection from: {conn_address}")
+        request = conn.recv(2048)
+        req_handler = RequestHandler(request)
+        response = handle_request(req_handler).encode()
+        conn.send(response)
+
+
 def main():
     print("logs appear here...")
+    server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
+    # conn, conn_address = server_socket.accept()  # wait for client
+
     while True:
-        server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
-        conn, conn_address = server_socket.accept()  # wait for client
-        with conn:
-            print(f"CLIENT ADDRESS => Connection from: {conn_address}")
-            request = conn.recv(2048)
-            req_handler = RequestHandler(request)
-            response = handle_request(req_handler).encode()
-            conn.send(response)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            c = executor.submit(server_socket.accept)
+            conn, conn_addr = c.result()
+        handle_connection(conn, conn_addr)
 
 
 if __name__ == "__main__":
