@@ -1,5 +1,5 @@
 import socket
-import threading
+import os
 import concurrent.futures
 
 CRLF = "\r\n"
@@ -67,15 +67,37 @@ class RequestHandler:
         return self.method, self.path, self.version
 
 
-def get_file_content(file_name):
-    with open(file_name, "r") as file:
+def get_file_content(file_path):
+    with open(file_path, "r") as file:
         return file.read()
 
 
+def create_file(file_path, content):
+    with open(file_path, "x") as file:
+        return file.write(content)
+
+
 def handle_request(req_handler):
-    _, path, _ = req_handler.get_status_line()
+    method, path, _ = req_handler.get_status_line()
+
     headers = req_handler.get_headers()
+    body = req_handler.get_body()
     resp_handler = ResponseHandler()
+    if method == "GET":
+        return handle_get_request(path, headers, resp_handler)
+    elif method == "POST":
+        return handle_post_request(path, body, resp_handler)
+
+
+def handle_post_request(path, body, resp_handler):
+    if path.startswith("/files/"):
+        create_file("." + path, body)
+        return "HTTP/1.1 201 Created\r\n\r\n"
+    else:
+        return resp_handler.create_failure_response()
+
+
+def handle_get_request(path, headers, resp_handler):
     if path == "/":
         body = get_file_content("index.html")
         headers = {
@@ -93,6 +115,10 @@ def handle_request(req_handler):
     elif path == "/user-agent":
         body = headers["User-Agent"]
         headers = {"Content-Type": "text/plain", "Content-Length": f"{len(body)}"}
+        return resp_handler.create_success_response(headers, body)
+    elif path.startswith("/files/") and os.path.exists("." + path):
+        body = get_file_content("." + path)
+        headers = {"Content-Type": "application/octet-stream", "Content-Length": f"{len(body)}"}
         return resp_handler.create_success_response(headers, body)
     elif path.startswith("/echo"):
         body = path.split("/echo/")[1]
